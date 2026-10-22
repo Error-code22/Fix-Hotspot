@@ -1,0 +1,9 @@
+# Generated local shortcut (contains an absolute path; created by Install.ps1)
+*.lnk
+
+# Logs
+*.log
+
+# Windows shell clutter
+Thumbs.db
+desktop.ini
