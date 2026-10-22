@@ -1,0 +1,91 @@
+# Fix Hotspot (Windows ICS repair)
+
+One-click repair for the Windows Mobile Hotspot bug where clients connect and get
+an IP address but report **"Connected, no internet"** until the PC is rebooted.
+
+## Symptom
+
+- The phone/laptop connects to the Windows Mobile Hotspot.
+- DHCP works: the client receives an address such as `192.168.137.41`.
+- Nothing resolves. Android/iOS show "Connected, no internet".
+- Rebooting the PC temporarily fixes it.
+
+## Cause
+
+Windows Internet Connection Sharing (ICS) runs both the DHCP server and a DNS
+proxy inside the `SharedAccess` service. The DNS proxy can stop listening on
+`192.168.137.1:53` while DHCP on port 67 keeps working. Clients then have a lease
+and a gateway but no name resolution, which is exactly what produces the
+"connected, no internet" state.
+
+Restarting the `SharedAccess` service rebuilds the DNS proxy. The hotspot is torn
+down as a side effect, so it has to be re-enabled afterwards.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `Fix Hotspot.bat` | Double-click launcher. Starts the repair script and closes its own console window. |
+| `Fix-Hotspot.ps1` | Main repair script. Health-checks first and only elevates when a repair is needed. |
+| `Fix Hotspot.lnk` | Shortcut to the launcher, carrying the custom `hotspot.ico` logo. |
+| `hotspot.ico` | Multi-resolution icon (16-256 px) used by the shortcuts. |
+| `Build-Icon.ps1` | Regenerates `hotspot.ico` and the preview images. |
+| `Install.ps1` | Creates or refreshes the `Fix Hotspot` shortcut on the Desktop. |
+| `Uninstall.ps1` | Removes the Desktop shortcut. |
+
+## Usage
+
+Double-click **Fix Hotspot** on the Desktop or **Fix Hotspot.lnk** in this folder.
+You can also run the launcher directly:
+
+```bat
+"Fix Hotspot.bat"
+```
+
+What happens:
+
+1. Confirms the laptop itself has an internet uplink.
+2. Queries a test name through `192.168.137.1`.
+   - Healthy: prints a message and exits **without a UAC prompt**.
+   - Broken: requests administrator rights, restarts ICS, re-enables the
+     hotspot, and verifies DNS again.
+
+Every run is logged to:
+
+```
+%LOCALAPPDATA%\HotspotFix\fix.log
+```
+
+## Why is there a .bat and a .lnk?
+
+Windows always draws the generic batch-file icon for a `.bat` file; the format
+has no field for a custom icon. The standard workaround is to launch it through
+a shortcut (`.lnk`), which does support a custom icon. Both shortcuts here use
+`hotspot.ico`, so the clickable item looks right. If you copy only the `.bat`
+somewhere, it will show the default icon again.
+
+## Manual equivalent
+
+```powershell
+Restart-Service SharedAccess -Force
+```
+
+Then turn the Mobile hotspot off and on again. The script performs the same
+steps through `Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager`.
+
+## Requirements
+
+- Windows 10 or Windows 11
+- Windows PowerShell 5.1
+- Administrator approval when a repair is actually needed
+
+## Notes
+
+- This automates recovery; it does not patch the underlying Windows ICS
+  component, so the issue can recur.
+- If a repair reports failure, toggle the Mobile hotspot in Settings and run the
+  shortcut again.
+- Recurring `WLAN Extensibility Module has stopped` events in the System log
+  point at the Wi-Fi driver; updating it can reduce how often this happens.
+- The hotspot is briefly unavailable during a repair (about 15 seconds), and the
+  phone should reconnect automatically.
